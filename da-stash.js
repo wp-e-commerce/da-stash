@@ -3,7 +3,8 @@
 jQuery(document).ready(function($) {
 
 	function addLoadingSpinner(thetarget) {
-		$(thetarget).find('.da-stash-loading').remove().end().prepend('<div class="da-stash-loading"></div>');
+		$('.da-stash-loading').remove();
+		$(thetarget).prepend('<div class="da-stash-loading"></div>');
 	}
 
 	$('.da-stash-connect').click(function (evt) {

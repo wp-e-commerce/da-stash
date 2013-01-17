@@ -128,7 +128,7 @@ class DA_Stash {
 
 		$auth_url = self::AUTHORIZATION_ENDPOINT . '?' . http_build_query( $parameters, null, '&' );
 
-		if ( self::DEBUG ) error_log('sending user to dA...');
+		if ( self::DEBUG ) error_log('redirecting user to dA...');
 
 		header('Location: ' . $auth_url);
 		exit();
@@ -143,8 +143,6 @@ class DA_Stash {
 
 		$result = self::wp_oauth_token_request( 'authorization_code', $body );
 
-		if ( self::DEBUG ) error_log( "authorization_code response! \n" . print_r( $result, true ) );
-
 		if ( $result->status === "success" ) {
 			self::store_user_auth_token( get_current_user_id(), $result );
 			return true;
@@ -158,8 +156,6 @@ class DA_Stash {
 		self::load_client_identity();
 
 		$result = self::wp_oauth_token_request( 'refresh_token', array( 'refresh_token' => $refresh_token ) );
-
-		if ( self::DEBUG ) error_log( "refresh_token response! \n" . print_r( $result, true ) );
 
 		if ( $result->status === "success" ) {
 			self::store_user_auth_token( get_current_user_id(), $result );
@@ -213,8 +209,6 @@ class DA_Stash {
 
 		$result = self::wp_oauth_request( self::PLACEBO_ENDPOINT, $body, $args );
 
-		if ( self::DEBUG ) error_log( "placebo response! \n" . print_r( $result, true ) );
-
 		return $result;
 	}
 
@@ -224,8 +218,6 @@ class DA_Stash {
 		$args = self::get_template_user_oauth_args();
 
 		$result = self::wp_oauth_request( self::WHOAMI_ENDPOINT, $body, $args );
-
-		if ( self::DEBUG ) error_log( "whoami response! \n" . print_r( $result, true ) );
 
 		return $result;
 	}
@@ -250,15 +242,11 @@ class DA_Stash {
 
 			$result = self::wp_oauth_request( $url, null, $args );
 
-			//if ( self::DEBUG ) error_log( "stash/delta response! \n". print_r( $result, true ) );
-
 			$next_offset = self::$entries->handle_delta( $result );
 
 		} while ( $next_offset !== true );
 
 		self::$entries->store_to_user();
-
-		if ( self::DEBUG ) error_log( "updated entries: \n". print_r( self::$entries->entries, true ) );
 
 		return self::$entries->entries;
 	}
@@ -300,12 +288,11 @@ class DA_Stash {
 
 		$args = array_merge( $default_args, $args );
 
-		if (self::DEBUG) error_log( 'DEBUG: API request to ' . $endpoint . ' with args ' . print_r( $args, true ) );
+		$response = wp_remote_request( $endpoint, $args );
 
-		$response = wp_remote_post( $endpoint, $args );
-
-		if ( ! is_wp_error( $response ) ) {
-			if ( self::DEBUG ) error_log( "DEBUG: response from API \n" . print_r( $response, true ) );
+		if ( is_wp_error( $response ) ) {
+			error_log( "DA_Stash: wp_oauth_request: wp_remote_post returned WP_Error: \n" . print_r( $response, true ) );
+			return false;
 		}
 
 		return json_decode( wp_remote_retrieve_body( $response ) );
@@ -404,9 +391,11 @@ class DA_Stash {
 
 	public static function remove_user_auth_token( $user_id ) {
 
-		$success = delete_user_meta( $user_id, 'da_stash_auth' );
+		delete_user_meta( $user_id, 'da_stash_auth' );
+		delete_user_meta( $user_id, 'da_stash_entries' );
+		delete_user_meta( $user_id, 'da_stash_delta_cursor' );
 
-		return $success;
+		return true;
 	}
 
 	public static function check_user_logged_in() {
