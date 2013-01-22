@@ -10,7 +10,7 @@ jQuery(document).ready(function($) {
 	$('.da-stash-connect').click(function (evt) {
 		addLoadingSpinner(evt.target);
 		evt.preventDefault();
-		var width = 700;
+		var width = 975;
 		var height = 400;
 		var left = (screen.width / 2) - (width / 2);
 		var top = (screen.height / 2) - (height / 2);

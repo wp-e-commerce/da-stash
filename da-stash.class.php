@@ -32,12 +32,14 @@ class DA_Stash {
 	const STASH_MEDIA_ENDPOINT           = 'https://www.deviantART.com/api/draft15/stash/media';
 	const DAMNTOKEN_ENDPOINT             = 'https://www.deviantART.com/api/draft15/user/damntoken';
 
+	const EXCEPTION_UNKNOWN              = 'DA_STASH_EXCEPTION_UNKNOWN';
 	const EXCEPTION_NOT_LOGGED_IN        = 'DA_STASH_EXCEPTION_NOT_LOGGED_IN';
 	const EXCEPTION_NOT_CONFIGURED       = 'DA_STASH_EXCEPTION_NOT_CONFIGURED';
 	const EXCEPTION_NO_DA_AUTH           = 'DA_STASH_EXCEPTION_NO_DA_AUTH';
 	const EXCEPTION_REFRESH_TOKEN_FAILED = 'DA_STASH_EXCEPTION_REFRESH_TOKEN_FAILED';
 	const EXCEPTION_HTTP_REQUEST_ERROR   = 'DA_STASH_EXCEPTION_HTTP_REQUEST_ERROR';
 	const EXCEPTION_INVALID_GRANT_TOKEN  = 'DA_STASH_EXCEPTION_INVALID_GRANT_TOKEN';
+	const EXCEPTION_INVALID_TOKEN        = 'DA_STASH_EXCEPTION_INVALID_TOKEN';
 
 	public static function controller () {
 		// CONTROLLER
@@ -103,8 +105,12 @@ class DA_Stash {
 					$error = self::json_error_obj( 'refresh_token_failed', __( "We tried to refresh the user's auth token and it failed. The user might have deauthorised their account against your site.", DA_STASH_I18N) );
 					self::json_http_response( $error, 401 );
 					break;
+				case self::EXCEPTION_INVALID_TOKEN :
+					$error = self::json_error_obj( 'token_failed', __( "We tried to talk to deviantART but they rejected the user's authorisation token. The user probably deauthorised their account against your site.", DA_STASH_I18N) );
+					self::json_http_response( $error, 401 );
+					break;
 				default:
-					error_log( 'rethrowing ' . $e->GetMessage() . ' ; it was not caught by DA_Stash::controller()' );
+					if ( self::DEBUG ) error_log( 'rethrowing ' . $e->GetMessage() . ' ; it was not caught by DA_Stash::controller()' );
 					throw $e;
 					break;
 			}
@@ -254,15 +260,12 @@ class DA_Stash {
 			}
 
 			$url = self::STASH_DELTA_ENDPOINT . '?' . http_build_query($parameters, null, '&');
-
 			$result = self::wp_oauth_request( $url, null, $args );
-
 			$next_offset = self::$entries->handle_delta( $result );
 
 		} while ( $next_offset !== true );
 
 		self::$entries->store_to_user();
-
 		return self::$entries->entries;
 	}
 
@@ -307,12 +310,22 @@ class DA_Stash {
 
 		if ( is_wp_error( $response ) ) {
 			if ( $response->errors['http_request_failed'] ) {
-				throw new Exception ( self::EXCEPTION_HTTP_REQUEST_ERROR );
+				throw new Exception( self::EXCEPTION_HTTP_REQUEST_ERROR );
 			}
-			error_log( "DA_Stash: wp_oauth_request: wp_remote_post returned WP_Error: \n" . print_r( $response, true ) );
-			return false;
+			if ( self::DEBUG ) error_log( "DA_Stash: wp_oauth_request: wp_remote_post returned WP_Error: \n" . print_r( $response, true ) );
+			throw new Exception( self::EXCEPTION_UNKNOWN );
 		}
 
+		if ( $response['response']['code'] !== 200 ) {
+			$body = json_decode( $response['body'] );
+			if ( $body->status === 'error' ) {
+				if ( $body->error === "invalid_token" ) {
+					throw new Exception( self::EXCEPTION_INVALID_TOKEN );
+				}
+			}
+			if ( self::DEBUG ) error_log( "DA_Stash: wp_oauth_request: wp_remote_post returned unknown HTTP status code: \n" . print_r( $response, true ) );
+			throw new Exception( self::EXCEPTION_UNKNOWN );
+		}
 		return json_decode( wp_remote_retrieve_body( $response ) );
 	}
 
@@ -336,7 +349,6 @@ class DA_Stash {
 		$obj = new stdClass();
 
 		$obj->success = $success;
-
 		return $obj;
 	}
 

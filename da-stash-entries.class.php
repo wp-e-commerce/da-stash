@@ -57,9 +57,9 @@ class DA_Stash_Entries {
 			} else {
 				$id = $entry->stashid;
 			}
-			error_log( "process_delta_entries: " . $id );
+			if ( self::DEBUG ) error_log( "process_delta_entries: " . $id );
 			if ( $entry->metadata === null ) {
-				error_log( "DELETING ENTRY " . $id . " : " . print_r( $entry, true ) );
+				if ( self::DEBUG ) error_log( "DELETING ENTRY " . $id . " : " . print_r( $entry, true ) );
 				delete( $this->entries->{$id} );
 			} else {
 				$this->entries->{$id} = $entry;
