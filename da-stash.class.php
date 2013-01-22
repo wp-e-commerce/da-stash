@@ -5,7 +5,7 @@ if ( ! class_exists( 'DA_Stash' ) ) {
 class DA_Stash {
 
 	const DEBUG                          = false;
-	const DEBUG_HTTP                     = true;
+	const DEBUG_HTTP                     = false;
 
 	public static $client_id             = null;
 	public static $client_secret         = null;
@@ -36,6 +36,8 @@ class DA_Stash {
 	const EXCEPTION_NOT_CONFIGURED       = 'DA_STASH_EXCEPTION_NOT_CONFIGURED';
 	const EXCEPTION_NO_DA_AUTH           = 'DA_STASH_EXCEPTION_NO_DA_AUTH';
 	const EXCEPTION_REFRESH_TOKEN_FAILED = 'DA_STASH_EXCEPTION_REFRESH_TOKEN_FAILED';
+	const EXCEPTION_HTTP_REQUEST_ERROR   = 'DA_STASH_EXCEPTION_HTTP_REQUEST_ERROR';
+	const EXCEPTION_INVALID_GRANT_TOKEN  = 'DA_STASH_EXCEPTION_INVALID_GRANT_TOKEN';
 
 	public static function controller () {
 		// CONTROLLER
@@ -93,8 +95,16 @@ class DA_Stash {
 					$error = self::json_error_obj( 'user_has_no_da_auth', __( 'Unauthorised - DA Stash: User has not been authenticated with deviantART.', DA_STASH_I18N) );
 					self::json_http_response( $error, 401 );
 					break;
+				case self::EXCEPTION_HTTP_REQUEST_ERROR :
+					$error = self::json_error_obj( 'http_request_error', __( 'We had a problem talking to deviantART. This is most likely a service timeout.', DA_STASH_I18N) );
+					self::json_http_response( $error, 500 );
+					break;
+				case self::EXCEPTION_REFRESH_TOKEN_FAILED :
+					$error = self::json_error_obj( 'refresh_token_failed', __( "We tried to refresh the user's auth token and it failed. The user might have deauthorised their account against your site.", DA_STASH_I18N) );
+					self::json_http_response( $error, 401 );
+					break;
 				default:
-					error_log( 'rethrowing ' . $e->GetMessage() . ' ; it was not caught in DA_Stash::controller()' );
+					error_log( 'rethrowing ' . $e->GetMessage() . ' ; it was not caught by DA_Stash::controller()' );
 					throw $e;
 					break;
 			}
@@ -146,7 +156,12 @@ class DA_Stash {
 		if ( $result->status === "success" ) {
 			self::store_user_auth_token( get_current_user_id(), $result );
 			return true;
+		} else {
+			if ($result->body->error === 'invalid_grant') {
+				throw new Exception( self::EXCEPTION_INVALID_GRANT_TOKEN );
+			}
 		}
+
 		return false;
 	}
 
@@ -291,6 +306,9 @@ class DA_Stash {
 		$response = wp_remote_request( $endpoint, $args );
 
 		if ( is_wp_error( $response ) ) {
+			if ( $response->errors['http_request_failed'] ) {
+				throw new Exception ( self::EXCEPTION_HTTP_REQUEST_ERROR );
+			}
 			error_log( "DA_Stash: wp_oauth_request: wp_remote_post returned WP_Error: \n" . print_r( $response, true ) );
 			return false;
 		}
@@ -310,6 +328,7 @@ class DA_Stash {
 
 	public static function json_http_response_unrecognized_action() {
 		$error = self::json_error_obj( 'unrecognized_action', __( 'Bad Request - DA Stash: Unrecognized action', DA_STASH_I18N ) );
+		if ( self::DEBUG ) error_log( print_r( $error, true ) );
 		self::json_http_response( $error, 400 );
 	}
 
